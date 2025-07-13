@@ -2,6 +2,7 @@ import json
 import random
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+from keep_alive import keep_alive
 
 BOT_TOKEN = "7989043314:AAFkx9oHbOZdXI0MWOCafcx2Ts-Jv5pb_zE"  # Replace this
 ADMIN_ID = 7366894756  # Your Telegram ID
@@ -240,7 +241,7 @@ def main():
     dp.add_handler(CommandHandler('rules', rules))
     dp.add_handler(CommandHandler('addrule', addrule))
     dp.add_handler(CommandHandler('addscore', addscore))
-
+    keep_alive()
     updater.start_polling()
     print("✅ Bot is running...")
     updater.idle()
