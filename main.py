@@ -1,31 +1,11 @@
 import json
-import time
 import random
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
-)
-from flask import Flask
-from threading import Thread
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 
-app = Flask('')
-
-@app.route('/')
-def home():
-        return "Bot is running!"
-
-def run():
-        app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-        t = Thread(target=run)
-        t.start()
-
-# === CONFIG ===
-rules_file = "rules.txt"
-BOT_TOKEN = "7989043314:AAFkx9oHbOZdXI0MWOCafcx2Ts-Jv5pb_zE"
-GROUP_ID = -1002835703789
-ADMIN_ID = 7366894756
+BOT_TOKEN = "7989043314:AAFkx9oHbOZdXI0MWOCafcx2Ts-Jv5pb_zE"  # Replace this
+ADMIN_ID = 7366894756  # Your Telegram ID
+GROUP_ID = -1002835703789  # Your tournament group ID
 
 TEAM_LIST = [
     ("🇧🇷", "Brazil"), ("🇦🇷", "Argentina"), ("🇫🇷", "France"), ("🇩🇪", "Germany"),
@@ -38,25 +18,13 @@ TEAM_LIST = [
     ("🇳🇬", "Nigeria"), ("🇲🇦", "Morocco"), ("🇦🇺", "Australia"), ("🇸🇳", "Senegal")
 ]
 
+REGISTER_TEAM, ENTER_PES = range(2)
+
 players_file = "players.json"
-fixtures_file = "fixtures.json"
-lock_file = "lock.json"
+group_fixtures_file = "group_fixtures.json"
+rules_file = "rules.txt"
 
-REGISTER_PES = 1  # Conversation state
-
-# === JSON UTILITIES ===
-def players_list(update: Update, context: CallbackContext):
-    players = load_json(players_file)
-
-    if not players:
-        update.message.reply_text("❌ No players have registered yet.")
-        return
-
-    reply = "👥 Registered Players:\n\n"
-    for p in players.values():
-        reply += f"{p['team']} — @{p['username']} (🎮 {p['pes']})\n"
-
-    update.message.reply_text(reply)
+# === Part 2: Utils + Registration ===
 def load_json(filename):
     try:
         with open(filename, 'r') as f:
@@ -67,314 +35,217 @@ def load_json(filename):
 def save_json(filename, data):
     with open(filename, 'w') as f:
         json.dump(data, f, indent=2)
-def rules(update: Update, context: CallbackContext):
-    try:
-        with open(rules_file, "r") as f:
-            lines = f.readlines()
-    except FileNotFoundError:
-        lines = []
 
-    if not lines:
-        update.message.reply_text("ℹ️ No rules added yet.")
-        return
-
-    formatted = "\n".join([f"{i+1}. {line.strip()}" for i, line in enumerate(lines)])
-    update.message.reply_text(f"📜 Tournament Rules:\n\n{formatted}")
-# === LOCKING SYSTEM ===
-def addrule(update: Update, context: CallbackContext):
-    if update.effective_user.id != ADMIN_ID:
-        update.message.reply_text("❌ Only the admin can use this command.")
-        return
-
-    text = " ".join(context.args).strip()
-    if not text:
-        update.message.reply_text("⚠️ Usage: /addrule Your rule text here")
-        return
-
-    try:
-        with open(rules_file, "a") as f:
-            f.write(text + "\n")
-        update.message.reply_text("✅ Rule added.")
-    except Exception as e:
-        update.message.reply_text("❌ Failed to add rule.")
-def is_locked():
-    lock = load_json(lock_file)
-    if not lock:
-        return False
-    # Check timeout (5 minutes)
-    if time.time() - lock.get("start_time", 0) > 300:
-        # timeout expired, release lock
-        save_json(lock_file, {})
-        return False
-    return True
-
-def lock_user(user_id):
-    save_json(lock_file, {"user_id": user_id, "start_time": time.time(), "selected_team": None})
-
-def unlock_user():
-    save_json(lock_file, {})
-
-def set_selected_team(team):
-    lock = load_json(lock_file)
-    lock["selected_team"] = team
-    save_json(lock_file, lock)
-
-def get_locked_user():
-    return load_json(lock_file).get("user_id")
-
-def get_locked_team():
-    return load_json(lock_file).get("selected_team")
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("👋 Welcome to the eFootball Knockout Tournament!\nUse /register to join.")
+    if update.effective_chat.id != GROUP_ID:
+        update.message.reply_text("❌ This bot only works in the official tournament group.")
+        return
+    update.message.reply_text("👋 Welcome to the eFootball Group Tournament! Type /register to begin.")
 
 def register(update: Update, context: CallbackContext):
-    user = update.effective_user
-
-    if update.effective_chat.type != "group" and update.effective_chat.type != "supergroup":
-        update.message.reply_text("❌ Please use /register in the tournament group.")
-        return
-
-    if is_locked():
-        update.message.reply_text("⚠️ Another player is registering. Please try again in a few minutes.")
+    if update.effective_chat.id != GROUP_ID:
         return
 
     players = load_json(players_file)
-    if str(user.id) in players:
-        update.message.reply_text("✅ You are already registered.")
-        return
+    user_id = str(update.effective_user.id)
 
-    # Lock this user
-    lock_user(user.id)
-
-    try:
-        context.bot.send_message(
-            chat_id=user.id,
-            text="📝 Let's get you registered!\nPlease select your national team:",
-            reply_markup=InlineKeyboardMarkup(build_team_buttons())
-        )
-        update.message.reply_text("📩 Check your DM to complete registration.")
-    except:
-        update.message.reply_text("❌ Couldn't send DM. Please start the bot first: @e_tournament_bot")
-        unlock_user()
-def set_commands(bot):
-    from telegram import BotCommand
-    commands = [
-        BotCommand("start", "Start the bot"),
-        BotCommand("register", "Register for the tournament"),
-        BotCommand("fixtures", "View your next match"),
-        BotCommand("rules", "Show tournament rules"),
-        BotCommand("players", "List registered players"),
-        BotCommand("addscore", "Admin: Add match scores"),
-        BotCommand("addrule", "Admin: Add a rule"),
-    ]
-    bot.set_my_commands(commands)
-def build_team_buttons():
-    players = load_json(players_file)
-    taken = [p['team'] for p in players.values()]
-    available = [(flag, name) for flag, name in TEAM_LIST if f"{flag} {name}" not in taken]
-
-    # Split into rows of 2
-    keyboard = []
-    row = []
-    for flag, name in available:
-        row.append(InlineKeyboardButton(f"{flag} {name}", callback_data=f"{flag} {name}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
-    return keyboard
-
-def handle_team_selection(update: Update, context: CallbackContext):
-    query = update.callback_query
-    user = query.from_user
-    query.answer()
-
-    if user.id != get_locked_user():
-        query.edit_message_text("⚠️ You are not allowed to register now. Please wait your turn.")
-        return
-
-    team = query.data
-    set_selected_team(team)
-
-    query.edit_message_text(f"✅ Team selected: {team}\n\nNow send your PES username:")
-
-    return REGISTER_PES
-
-def receive_pes_name(update: Update, context: CallbackContext):
-    user = update.effective_user
-    pes_name = update.message.text.strip()
-    players = load_json(players_file)
-
-    team = get_locked_team()
-    if not team:
-        update.message.reply_text("❌ Something went wrong. Try /register again.")
-        unlock_user()
+    if user_id in players:
+        update.message.reply_text("⚠️ You are already registered.")
         return ConversationHandler.END
 
+    taken_teams = [p['team'] for p in players.values()]
+    available = [(flag, name) for flag, name in TEAM_LIST if f"{flag} {name}" not in taken_teams]
+
+    if not available:
+        update.message.reply_text("❌ All teams are taken!")
+        return ConversationHandler.END
+
+    keyboard = [[f"{flag} {name}"] for flag, name in available]
+    update.message.reply_text("Select your national team:", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
+    return REGISTER_TEAM
+
+def get_team(update: Update, context: CallbackContext):
+    context.user_data['team'] = update.message.text
+    update.message.reply_text("Enter your PES username:", reply_markup=ReplyKeyboardMarkup([['Cancel']], one_time_keyboard=True))
+    return ENTER_PES
+
+def get_pes(update: Update, context: CallbackContext):
+    pes_name = update.message.text
+    team = context.user_data['team']
+    user = update.effective_user
+    players = load_json(players_file)
+
+    # ==== Group Assignment ====
+    group_counts = {g: 0 for g in "ABCDEFGH"}
+    for p in players.values():
+        if "group" in p:
+            group_counts[p["group"]] += 1
+    available_groups = [g for g, count in group_counts.items() if count < 4]
+    if not available_groups:
+        update.message.reply_text("❌ All groups are full.")
+        return ConversationHandler.END
+    chosen_group = random.choice(available_groups)
+
+    # ==== Save Player ====
     players[str(user.id)] = {
-        "name": user.first_name,
-        "username": user.username or "NoUsername",
-        "team": team,
-        "pes": pes_name
+        'name': user.first_name,
+        'username': user.username or "NoUsername",
+        'team': team,
+        'pes': pes_name,
+        'group': chosen_group
     }
-
     save_json(players_file, players)
-    unlock_user()
 
-    context.bot.send_message(chat_id=user.id, text=f"✅ Registered!\n🏳️ Team: {team}\n🎮 PES: {pes_name}")
-    context.bot.send_message(chat_id=GROUP_ID, text=f"✅ @{user.username or user.first_name} registered as {team}")
+    update.message.reply_text(
+        f"✅ Registered!\n"
+        f"🧿 You have been drawn into Group {chosen_group}\n"
+        f"🏳️ Team: {team}\n"
+        f"🎮 PES Username: {pes_name}\n"
+        f"🆚 You’ll play 3 group matches. Get ready!"
+    )
 
     if len(players) == 32:
-        make_fixtures(context)
+        make_group_fixtures(context)
 
     return ConversationHandler.END
-def make_fixtures(context: CallbackContext):
-    players = list(load_json(players_file).items())
-    random.shuffle(players)
 
-    fixtures = {"round_1": []}
-    for i in range(0, len(players), 2):
-        p1, p2 = players[i], players[i+1]
-        fixtures["round_1"].append([p1[0], p2[0]])  # store user_ids
+def cancel(update: Update, context: CallbackContext):
+    update.message.reply_text("Registration cancelled.")
+    return ConversationHandler.END
+def make_group_fixtures(context):
+    players = load_json(players_file)
+    groups = {g: [] for g in "ABCDEFGH"}
+    for uid, info in players.items():
+        groups[info['group']].append(uid)
 
-    save_json(fixtures_file, fixtures)
+    group_fixtures = {}
+    for group, ids in groups.items():
+        matchups = []
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                matchups.append([ids[i], ids[j]])
+        group_fixtures[group] = matchups
 
-    # Notify all
-    for match in fixtures["round_1"]:
-        try:
-            p1 = load_json(players_file)[match[0]]
-            p2 = load_json(players_file)[match[1]]
-            context.bot.send_message(
-                chat_id=GROUP_ID,
-                text=f"📢 Match Scheduled:\n{p1['team']} vs {p2['team']}\n🎮 @{p1['username']} vs @{p2['username']}\n⚠️ Deadline: 2:00 AM"
-            )
-        except:
-            pass
-
+    save_json(group_fixtures_file, group_fixtures)
 
 def fixtures(update: Update, context: CallbackContext):
     user_id = str(update.effective_user.id)
     players = load_json(players_file)
-    fixtures = load_json(fixtures_file)
+    group_fixtures = load_json(group_fixtures_file)
 
-    for rnd in fixtures:
-        for match in fixtures[rnd]:
-            if user_id in match:
-                opponent_id = match[1] if match[0] == user_id else match[0]
-                opponent = players.get(opponent_id)
-                your_team = players[user_id]['team']
-                opp_team = opponent['team']
+    player_info = players.get(user_id)
+    if not player_info:
+        update.message.reply_text("❌ You are not registered.")
+        return
+
+    group = player_info["group"]
+    matches = group_fixtures.get(group, [])
+    for match in matches:
+        if user_id in match:
+            opponent_id = match[1] if match[0] == user_id else match[0]
+            opponent = players.get(opponent_id)
+            if opponent:
+                your_team = player_info["team"]
+                opp_team = opponent["team"]
                 update.message.reply_text(
-                    f"📅 Your Next Match:\n\n{your_team} vs {opp_team}\n🎮 Opponent: @{opponent['username']}\n⚠️ Deadline: 2:00 AM"
+                    f"📅 Your Group Match:\n\n"
+                    f"{your_team} vs {opp_team}\n"
+                    f"🎮 Opponent: @{opponent['username']}\n"
+                    f"📍 Group {group}\n"
+                    f"⏰ Deadline: Submit result by 2:00 AM"
                 )
                 return
 
-    update.message.reply_text("❌ No upcoming match found.")
-from telegram.ext import Filters  # already imported in Part 1
+    update.message.reply_text("❌ No match found for you yet.")
 
-current_matches = {}  # maps match command (e.g. match1) to user IDs
+def rules(update: Update, context: CallbackContext):
+    if update.effective_user.id != ADMIN_ID:
+        update.message.reply_text("❌ Admins only.")
+        return
+    try:
+        with open(rules_file, 'r') as f:
+            rules_text = f.read().strip()
+        update.message.reply_text("📜 Rules:\n\n" + (rules_text or "No rules set yet."))
+    except:
+        update.message.reply_text("⚠️ Could not load rules.")
+
+def addrule(update: Update, context: CallbackContext):
+    if update.effective_user.id != ADMIN_ID:
+        update.message.reply_text("❌ Admins only.")
+        return
+    new_rule = ' '.join(context.args)
+    if not new_rule:
+        update.message.reply_text("⚠️ Usage: /addrule Your rule text here")
+        return
+    with open(rules_file, 'a') as f:
+        f.write(f"- {new_rule}\n")
+    update.message.reply_text("✅ Rule added.")
+
+def groups(update: Update, context: CallbackContext):
+    players = load_json(players_file)
+    grouped = {g: [] for g in "ABCDEFGH"}
+    for p in players.values():
+        grouped[p['group']].append(p)
+
+    for g in sorted(grouped):
+        if not grouped[g]:
+            continue
+        msg = f"🏆 Group {g} Teams:\n"
+        for p in grouped[g]:
+            msg += f"{p['team']} - @{p['username']}\n"
+        update.message.reply_text(msg)
 
 def addscore(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
-        return update.message.reply_text("❌ You are not authorized.")
+        return
 
-    fixtures = load_json(fixtures_file)
+    args = context.args
+    if len(args) < 3:
+        update.message.reply_text("⚠️ Usage: /addscore <Group> <MatchNumber> <score> (e.g. /addscore A 2 2-1)")
+        return
+
+    group, match_num, score = args[0], int(args[1]), args[2]
+    group_fixtures = load_json(group_fixtures_file)
     players = load_json(players_file)
 
-    # Get latest round (e.g., round_1, round_2…)
-    latest_round = sorted(fixtures.keys())[-1]
-    matches = fixtures[latest_round]
-
-    # Build match list with numbers
-    reply = "📋 Today's Matches:\n\n"
-    current_matches.clear()
-
-    for idx, match in enumerate(matches, 1):
-        p1 = players[match[0]]
-        p2 = players[match[1]]
-        current_matches[f"match{idx}"] = match
-        reply += f"/match{idx} → {p1['team']} vs {p2['team']}\n"
-
-    reply += "\nTo add score: /match1 2-1"
-    update.message.reply_text(reply)
-
-def handle_score(update: Update, context: CallbackContext):
-    if update.effective_user.id != ADMIN_ID:
+    matches = group_fixtures.get(group.upper())
+    if not matches or match_num > len(matches):
+        update.message.reply_text("❌ Invalid match number.")
         return
 
-    text = update.message.text.lower().strip()
-    if not text.startswith("/match"):
-        return
-
-    try:
-        cmd, score = text.split(" ", 1)
-        match_key = cmd[1:]  # remove slash
-        goals = score.strip().split("-")
-        if len(goals) != 2:
-            raise ValueError
-
-        team1_score = int(goals[0])
-        team2_score = int(goals[1])
-        match = current_matches.get(match_key)
-
-        if not match:
-            update.message.reply_text("❌ Match not found.")
-            return
-
-        winner = match[0] if team1_score > team2_score else match[1]
-
-        fixtures = load_json(fixtures_file)
-        players = load_json(players_file)
-        current_round = sorted(fixtures.keys())[-1]
-        next_round = f"round_{int(current_round.split('_')[1]) + 1}"
-
-        if next_round not in fixtures:
-            fixtures[next_round] = []
-
-        fixtures[next_round].append([winner])  # Store winner temporarily
-        save_json(fixtures_file, fixtures)
-
-        win_team = players[winner]['team']
-        update.message.reply_text(f"✅ {win_team} moves to next round!")
-    except:
-        update.message.reply_text("❌ Invalid format. Use like: /match2 1-0")
-
-from telegram.ext import CallbackQueryHandler
-
-def cancel(update: Update, context: CallbackContext):
-    unlock_user()
-    update.message.reply_text("❌ Registration cancelled.")
-    return ConversationHandler.END
+    home_id, away_id = matches[match_num - 1]
+    home = players.get(home_id)
+    away = players.get(away_id)
+    update.message.reply_text(f"✅ Score Recorded:\n{home['team']} {score} {away['team']}")
 
 def main():
-    keep_alive()
     updater = Updater(BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_team_selection)],
+    # === Registration Conversation ===
+    conv = ConversationHandler(
+        entry_points=[CommandHandler('register', register)],
         states={
-            REGISTER_PES: [MessageHandler(Filters.text & ~Filters.command, receive_pes_name)],
+            REGISTER_TEAM: [MessageHandler(Filters.text & ~Filters.command, get_team)],
+            ENTER_PES: [MessageHandler(Filters.text & ~Filters.command, get_pes)]
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        allow_reentry=True
+        fallbacks=[MessageHandler(Filters.regex('Cancel'), cancel)],
+        allow_reentry=False
     )
 
     dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(CommandHandler('register', register))
+    dp.add_handler(conv)
     dp.add_handler(CommandHandler('fixtures', fixtures))
+    dp.add_handler(CommandHandler('groups', groups))
+    dp.add_handler(CommandHandler('rules', rules))
+    dp.add_handler(CommandHandler('addrule', addrule))
     dp.add_handler(CommandHandler('addscore', addscore))
-    dp.add_handler(MessageHandler(Filters.regex(r"^/match[0-9]+ "), handle_score))
-    dp.add_handler(CommandHandler("addrule", addrule))
-    dp.add_handler(CommandHandler("rules", rules))
-    dp.add_handler(CommandHandler("players", players_list))
 
-    dp.add_handler(conv_handler)
-    
     updater.start_polling()
-    updater.start_polling()
+    print("✅ Bot is running...")
     updater.idle()
 
 if __name__ == '__main__':
     main()
+
+
