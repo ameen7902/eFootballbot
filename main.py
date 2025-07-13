@@ -156,32 +156,44 @@ def make_group_fixtures(context):
 def fixtures(update: Update, context: CallbackContext):
     user_id = str(update.effective_user.id)
     players = load_json(players_file)
-    group_fixtures = load_json(group_fixtures_file)
 
-    player_info = players.get(user_id)
-    if not player_info:
-        update.message.reply_text("❌ You are not registered.")
-        return
+    # First try GROUP fixtures
+    group_fixtures = load_json("group_fixture.json")
+    for group, matches in group_fixtures.items():
+        for match in matches:
+            if user_id in match[:2]:
+                if len(match) < 3 or "score" not in match[2]:  # match not yet played
+                    opponent_id = match[1] if match[0] == user_id else match[0]
+                    opponent = players.get(opponent_id)
+                    your_team = players[user_id]["team"]
+                    opponent_team = opponent["team"]
+                    update.message.reply_text(
+                        f"📅 Group Stage Match ({group.upper()}):\n\n"
+                        f"{your_team} vs {opponent_team}\n"
+                        f"🎮 Opponent: @{opponent['username']}\n"
+                        f"⏰ Deadline: Before 2:00 AM"
+                    )
+                    return
 
-    group = player_info["group"]
-    matches = group_fixtures.get(group, [])
-    for match in matches:
-        if user_id in match:
-            opponent_id = match[1] if match[0] == user_id else match[0]
-            opponent = players.get(opponent_id)
-            if opponent:
-                your_team = player_info["team"]
-                opp_team = opponent["team"]
-                update.message.reply_text(
-                    f"📅 Your Group Match:\n\n"
-                    f"{your_team} vs {opp_team}\n"
-                    f"🎮 Opponent: @{opponent['username']}\n"
-                    f"📍 Group {group}\n"
-                    f"⏰ Deadline: Submit result by 2:00 AM"
-                )
-                return
+    # Else try KNOCKOUT fixtures
+    knockout = load_json("knockout.json")
+    for round_name, matches in knockout.items():
+        for match in matches:
+            if user_id in match[:2]:
+                if len(match) < 3 or "score" not in match[2]:  # match not yet played
+                    opponent_id = match[1] if match[0] == user_id else match[0]
+                    opponent = players.get(opponent_id)
+                    your_team = players[user_id]["team"]
+                    opponent_team = opponent["team"]
+                    update.message.reply_text(
+                        f"📅 {round_name.replace('_', ' ').title()} Match:\n\n"
+                        f"{your_team} vs {opponent_team}\n"
+                        f"🎮 Opponent: @{opponent['username']}\n"
+                        f"⏰ Deadline: Before 2:00 AM"
+                    )
+                    return
 
-    update.message.reply_text("❌ No match found for you yet.")
+    update.message.reply_text("❌ No upcoming match found for you.")
 
 def rules(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
