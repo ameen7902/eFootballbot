@@ -69,7 +69,31 @@ def get_team(update: Update, context: CallbackContext):
     context.user_data['team'] = update.message.text
     update.message.reply_text("Enter your PES username:", reply_markup=ReplyKeyboardMarkup([['Cancel']], one_time_keyboard=True))
     return ENTER_PES
+    
+def standings(update: Update, context: CallbackContext):
+    players = load_json(players_file)
+    scores = load_json(group_scores_file)
+    group_data = {}
 
+    for group in "ABCDEFGH":
+        group_data[group] = []
+
+    for uid, info in players.items():
+        group = info["group"]
+        team = info["team"]
+        points = scores.get(uid, {}).get("points", 0)
+        gd = scores.get(uid, {}).get("gd", 0)
+        group_data[group].append((team, points, gd))
+
+    for group, teams in group_data.items():
+        if not teams:
+            continue
+        sorted_teams = sorted(teams, key=lambda x: (-x[1], -x[2]))
+        msg = f"📊 Group {group} Standings:\n"
+        for team, pts, gd in sorted_teams:
+            msg += f"{team} — {pts} pts | GD: {gd}\n"
+        update.message.reply_text(msg)
+        
 def get_pes(update: Update, context: CallbackContext):
     pes_name = update.message.text
     team = context.user_data['team']
@@ -239,8 +263,9 @@ def main():
     dp.add_handler(CommandHandler('fixtures', fixtures))
     dp.add_handler(CommandHandler('groups', groups))
     dp.add_handler(CommandHandler('rules', rules))
-    dp.add_handler(CommandHandler('addrule', addrule))
+    dp.add_handler(CommandHandler('addrule', addrule)) 
     dp.add_handler(CommandHandler('addscore', addscore))
+    dp.add_handler(CommandHandler('standings', standings))
     keep_alive()
     updater.start_polling()
     print("✅ Bot is running...")
