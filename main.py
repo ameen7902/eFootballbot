@@ -126,7 +126,7 @@ def handle_score(update: Update, context: CallbackContext):
 
     except Exception as e:
         update.message.reply_text("❌ Error in score format or command.")    
- def group_standing_inline(update: Update, context: CallbackContext):
+def group_standing_inline(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
 
