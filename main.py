@@ -491,6 +491,15 @@ def main():
     dp.add_handler(CommandHandler('addscore', addscore))
     dp.add_handler(CommandHandler("status", status))
     dp.add_handler(MessageHandler(Filters.regex(r'^/match\d+ \d+-\d+$'), handle_score))
+    conv_handler = ConversationHandler(
+    entry_points=[CommandHandler('register', register)],
+    states={
+        REGISTER_TEAM: [MessageHandler(Filters.text & ~Filters.command, get_team)],
+        ENTER_PES: [MessageHandler(Filters.text & ~Filters.command, get_pes)],
+    },
+    fallbacks=[MessageHandler(Filters.regex('Cancel'), cancel)]
+)
+dp.add_handler(conv_handler)
     keep_alive()
     updater.start_polling()
     print("✅ Bot is running...")
