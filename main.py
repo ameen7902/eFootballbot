@@ -131,10 +131,7 @@ def reminder_job(context: CallbackContext):
                             pass
 
 # Register commands and jobs
-dp.add_handler(CommandHandler("status", status))
-dp.add_handler(CommandHandler("help", help_command))
-dp.add_handler(CallbackQueryHandler(handle_help_buttons))
-job.run_daily(reminder_job, time=datetime.time(hour=16, minute=0))
+    
 def is_locked():
     lock = load_json("lock")
     if not lock:
@@ -352,3 +349,43 @@ def handle_score(update: Update, context: CallbackContext):
         )
     except:
         update.message.reply_text("⚠️ Format error. Use like: /match1 2-1")
+
+
+# === MAIN FUNCTION ===
+def main():
+    keep_alive()
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
+    job = updater.job_queue
+
+    # Command Handlers
+    dp.add_handler(CommandHandler("start", lambda update, context: update.message.reply_text("👋 Welcome to the Tournament Bot!")))
+    dp.add_handler(CommandHandler("register", register))
+    dp.add_handler(CommandHandler("status", status))
+    dp.add_handler(CommandHandler("rules", rules))
+    dp.add_handler(CommandHandler("players", players_list))
+    dp.add_handler(CommandHandler("fixtures", fixtures))
+    dp.add_handler(CommandHandler("help", help_command))
+    dp.add_handler(CommandHandler("addscore", addscore))
+    dp.add_handler(MessageHandler(Filters.regex(r'^/match\d+ \d+-\d+$'), handle_score))
+
+    # Team selection and PES name entry
+    conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_team_selection)],
+        states={REGISTER_PES: [MessageHandler(Filters.text & ~Filters.command, receive_pes_name)]},
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
+    dp.add_handler(conv_handler)
+
+    # Help menu buttons
+    dp.add_handler(CallbackQueryHandler(handle_help_buttons))
+
+    # Reminders
+    job.run_daily(reminder_job, time=datetime.time(hour=16, minute=0))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
+
