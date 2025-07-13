@@ -4,6 +4,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from keep_alive import keep_alive
 from telegram.ext import ConversationHandler
+from telegram.ext import CallbackQueryHandler
 
 pending_scores = {}  # Store matches waiting for scoring
 BOT_TOKEN = "7989043314:AAFkx9oHbOZdXI0MWOCafcx2Ts-Jv5pb_zE"  # Replace this
