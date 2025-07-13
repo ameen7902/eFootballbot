@@ -24,7 +24,7 @@ def keep_alive():
     t.start()
 
 # === JSONBin CONFIG ===
-JSONBIN_API_KEY = "YOUR_SECRET_API_KEY"  # Replace with real key
+JSONBIN_API_KEY = "$2a$10$m2andE0xD5ERu6kE7anPe.ZWNAefAPUGj.3K8bK6LwWS/3StccPX2"  # Replace with real key
 BIN_IDS = {
     "rules": "6873cb1cf39d6c7eded49038",
     "lock": "6873ca30f39d6c7eded48faf",
@@ -53,7 +53,7 @@ def save_json(bin_name, data):
         return False
 
 # === BOT CONFIG ===
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+BOT_TOKEN = "7989043314:AAFkx9oHbOZdXI0MWOCafcx2Ts-Jv5pb_zE"
 GROUP_ID = -1002835703789
 ADMIN_ID = 7366894756
 
