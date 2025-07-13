@@ -64,9 +64,24 @@ def register(update: Update, context: CallbackContext):
         update.message.reply_text("❌ All teams are taken!")
         return ConversationHandler.END
 
-    keyboard = [[f"{flag} {name}"] for flag, name in available]
-    update.message.reply_text("Select your national team:", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
-    return REGISTER_TEAM
+    # ✅ Step 1: Notify user in group to check DM
+    update.message.reply_text("✅ Check your DM to complete registration.")
+
+    # ✅ Step 2: Store in user_data that we're moving to DM
+    context.user_data['available_teams'] = available
+
+    # ✅ Step 3: Start registration in DM
+    try:
+        keyboard = [[f"{flag} {name}"] for flag, name in available]
+        context.bot.send_message(
+            chat_id=update.effective_user.id,
+            text="👋 Let's begin! Select your national team:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+        return REGISTER_TEAM
+    except:
+        update.message.reply_text("❌ Please start the bot in DM first by clicking here: https://t.me/YOUR_BOT_USERNAME")
+        return ConversationHandler.END
 def addscore(update: Update, context: CallbackContext):
     if update.effective_user.id != ADMIN_ID:
         update.message.reply_text("❌ Admin only.")
